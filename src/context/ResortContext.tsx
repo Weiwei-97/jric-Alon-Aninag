@@ -22,12 +22,14 @@ import confetti from 'canvas-confetti';
 
 interface WeatherInfo {
   temperatureC: number;
+  tempC?: number;
   condition: string;
   humidity: number;
   windKmH: number;
   sunsetTime: string;
   seaCondition: string;
   uvIndex: number;
+  highTide?: string;
 }
 
 interface ResortContextType {
@@ -47,6 +49,7 @@ interface ResortContextType {
   reservations: Reservation[];
   createBooking: (reservation: Omit<Reservation, 'id' | 'referenceNumber' | 'createdAt'>) => Promise<Reservation>;
   cancelBooking: (id: string) => void;
+  updateBookingStatus: (id: string, status: Reservation['bookingStatus']) => void;
   getBookingByReference: (ref: string) => Reservation | undefined;
   activeBookingModalRoomId: string | null;
   openBookingModal: (roomId?: string) => void;
@@ -58,9 +61,11 @@ interface ResortContextType {
   currentUser: UserAccount | null;
   userRole: 'customer' | 'staff' | 'admin';
   setUserRole: (role: 'customer' | 'staff' | 'admin') => void;
-  loginUser: (email: string, role?: 'customer' | 'staff' | 'admin', name?: string) => void;
+  loginUser: (emailOrUser: string | Partial<UserAccount>, role?: 'customer' | 'staff' | 'admin', name?: string) => void;
   logoutUser: () => void;
   isAuthModalOpen: boolean;
+  authModalMode: 'login' | 'signup';
+  setAuthModalMode: (mode: 'login' | 'signup') => void;
   openAuthModal: (initialTab?: 'login' | 'signup') => void;
   closeAuthModal: () => void;
   savedAttractionIds: string[];
@@ -76,8 +81,11 @@ interface ResortContextType {
   // Live Chat
   chatMessages: ChatMessage[];
   sendChatMessage: (text: string) => void;
+  sendMessage: (text: string) => void;
   isChatOpen: boolean;
   setIsChatOpen: (open: boolean) => void;
+  toggleChat: () => void;
+  isSupportTyping: boolean;
 
   // Notifications
   notifications: NotificationItem[];
@@ -88,8 +96,11 @@ interface ResortContextType {
   // Offline Mode & Itinerary
   isOfflineMode: boolean;
   setIsOfflineMode: (offline: boolean) => void;
+  toggleOfflineMode: () => void;
   isOfflineModalOpen: boolean;
   setIsOfflineModalOpen: (open: boolean) => void;
+  openOfflineModal: () => void;
+  closeOfflineModal: () => void;
 
   // Search & Navigation
   searchQuery: string;
@@ -393,6 +404,22 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   }
 ];
 
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+};
+
 const ResortContext = createContext<ResortContextType | undefined>(undefined);
 
 export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -402,22 +429,35 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
   const [isOfflineModalOpen, setIsOfflineModalOpen] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
+  const [isSupportTyping, setIsSupportTyping] = useState<boolean>(false);
+
+  const toggleOfflineMode = () => setIsOfflineMode(prev => !prev);
+  const openOfflineModal = () => setIsOfflineModalOpen(true);
+  const closeOfflineModal = () => setIsOfflineModalOpen(false);
+  const toggleChat = () => setIsChatOpen(prev => !prev);
 
   // Weather state (Sipalay City conditions)
   const [weather, setWeather] = useState<WeatherInfo>({
     temperatureC: 29,
+    tempC: 29,
     condition: 'Sunny & Gentle Sea Breeze',
     humidity: 74,
     windKmH: 12,
     sunsetTime: '5:58 PM',
+    highTide: '3:45 PM (1.4m)',
     seaCondition: 'Calm & Crystal Clear (0.3m wave height)',
     uvIndex: 7
   });
 
   // Reservations
   const [reservations, setReservations] = useState<Reservation[]>(() => {
-    const saved = localStorage.getItem('alon_aninag_reservations');
-    return saved ? JSON.parse(saved) : INITIAL_RESERVATIONS;
+    try {
+      const saved = safeGetItem('alon_aninag_reservations');
+      return saved ? JSON.parse(saved) : INITIAL_RESERVATIONS;
+    } catch {
+      return INITIAL_RESERVATIONS;
+    }
   });
 
   const [activeBookingModalRoomId, setActiveBookingModalRoomId] = useState<string | null>(null);
@@ -425,8 +465,12 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Auth & Roles
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    const saved = localStorage.getItem('alon_aninag_user');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = safeGetItem('alon_aninag_user');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
     return {
       id: 'usr-guest-1',
       name: 'Camille Tan',
@@ -446,26 +490,42 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Social & Reviews
   const [reviews, setReviews] = useState<UserReview[]>(() => {
-    const saved = localStorage.getItem('alon_aninag_reviews');
-    return saved ? JSON.parse(saved) : REVIEWS_DATA;
+    try {
+      const saved = safeGetItem('alon_aninag_reviews');
+      return saved ? JSON.parse(saved) : REVIEWS_DATA;
+    } catch {
+      return REVIEWS_DATA;
+    }
   });
 
   const [socialPosts, setSocialPosts] = useState<SocialPost[]>(() => {
-    const saved = localStorage.getItem('alon_aninag_social');
-    return saved ? JSON.parse(saved) : SOCIAL_POSTS;
+    try {
+      const saved = safeGetItem('alon_aninag_social');
+      return saved ? JSON.parse(saved) : SOCIAL_POSTS;
+    } catch {
+      return SOCIAL_POSTS;
+    }
   });
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('alon_aninag_chat');
-    return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+    try {
+      const saved = safeGetItem('alon_aninag_chat');
+      return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+    } catch {
+      return INITIAL_CHAT_MESSAGES;
+    }
   });
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
   // Notifications
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const saved = localStorage.getItem('alon_aninag_notifications');
-    return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    try {
+      const saved = safeGetItem('alon_aninag_notifications');
+      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    } catch {
+      return INITIAL_NOTIFICATIONS;
+    }
   });
 
   // GPS / Geolocation
@@ -474,38 +534,42 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Saved destinations
   const [savedAttractionIds, setSavedAttractionIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('alon_aninag_saved_destinations');
-    return saved ? JSON.parse(saved) : ['attr-tinagong-dagat', 'attr-campomanes-bay', 'attr-sugar-beach'];
+    try {
+      const saved = safeGetItem('alon_aninag_saved_destinations');
+      return saved ? JSON.parse(saved) : ['attr-tinagong-dagat', 'attr-campomanes-bay', 'attr-sugar-beach'];
+    } catch {
+      return ['attr-tinagong-dagat', 'attr-campomanes-bay', 'attr-sugar-beach'];
+    }
   });
 
   // Save to local storage on changes
   useEffect(() => {
-    localStorage.setItem('alon_aninag_reservations', JSON.stringify(reservations));
+    safeSetItem('alon_aninag_reservations', JSON.stringify(reservations));
   }, [reservations]);
 
   useEffect(() => {
-    localStorage.setItem('alon_aninag_reviews', JSON.stringify(reviews));
+    safeSetItem('alon_aninag_reviews', JSON.stringify(reviews));
   }, [reviews]);
 
   useEffect(() => {
-    localStorage.setItem('alon_aninag_social', JSON.stringify(socialPosts));
+    safeSetItem('alon_aninag_social', JSON.stringify(socialPosts));
   }, [socialPosts]);
 
   useEffect(() => {
-    localStorage.setItem('alon_aninag_chat', JSON.stringify(chatMessages));
+    safeSetItem('alon_aninag_chat', JSON.stringify(chatMessages));
   }, [chatMessages]);
 
   useEffect(() => {
-    localStorage.setItem('alon_aninag_notifications', JSON.stringify(notifications));
+    safeSetItem('alon_aninag_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem('alon_aninag_saved_destinations', JSON.stringify(savedAttractionIds));
+    safeSetItem('alon_aninag_saved_destinations', JSON.stringify(savedAttractionIds));
   }, [savedAttractionIds]);
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('alon_aninag_user', JSON.stringify(currentUser));
+      safeSetItem('alon_aninag_user', JSON.stringify(currentUser));
     }
   }, [currentUser]);
 
@@ -616,6 +680,11 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     addNotification('Reservation Status Updated', 'Your booking reservation status was updated.', 'booking');
   };
 
+  const updateBookingStatus = (id: string, status: Reservation['bookingStatus']) => {
+    setReservations(prev => prev.map(r => r.id === id ? { ...r, bookingStatus: status } : r));
+    addNotification('Reservation Updated', `Reservation status changed to ${status}`, 'booking');
+  };
+
   const getBookingByReference = (ref: string): Reservation | undefined => {
     return reservations.find(r => r.referenceNumber.trim().toUpperCase() === ref.trim().toUpperCase());
   };
@@ -628,7 +697,8 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setActiveBookingModalRoomId(null);
   };
 
-  const openAuthModal = (_initialTab?: 'login' | 'signup') => {
+  const openAuthModal = (initialTab: 'login' | 'signup' = 'login') => {
+    setAuthModalMode(initialTab);
     setIsAuthModalOpen(true);
   };
 
@@ -636,7 +706,33 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsAuthModalOpen(false);
   };
 
-  const loginUser = (email: string, role: 'customer' | 'staff' | 'admin' = 'customer', name?: string) => {
+  const loginUser = (
+    emailOrUser: string | Partial<UserAccount>,
+    role: 'customer' | 'staff' | 'admin' = 'customer',
+    name?: string
+  ) => {
+    if (typeof emailOrUser === 'object') {
+      const newUser: UserAccount = {
+        id: emailOrUser.id || `usr-${Date.now()}`,
+        name: emailOrUser.name || `${emailOrUser.firstName || 'Maria'} ${emailOrUser.lastName || 'Santos'}`,
+        firstName: emailOrUser.firstName || 'Maria',
+        lastName: emailOrUser.lastName || 'Santos',
+        email: emailOrUser.email || 'maria.santos@gmail.com',
+        phone: emailOrUser.phone || '+63 917 582 2566',
+        role: emailOrUser.role || role,
+        loyaltyPoints: emailOrUser.loyaltyPoints || 340,
+        loyaltyTier: emailOrUser.loyaltyTier || 'Wave',
+        savedDestinations: emailOrUser.savedDestinations || ['attr-tinagong-dagat', 'attr-sugar-beach'],
+        bookingHistory: emailOrUser.bookingHistory || ['ALON-2026-8192']
+      };
+      setCurrentUser(newUser);
+      setUserRole(newUser.role);
+      setIsAuthModalOpen(false);
+      addNotification('Welcome to Alon!', `Signed in as ${newUser.name}`, 'alert');
+      return;
+    }
+
+    const email = emailOrUser;
     const accountName = name || email.split('@')[0];
     const newUser: UserAccount = {
       id: `usr-${Date.now()}`,
@@ -818,6 +914,7 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         reservations,
         createBooking,
         cancelBooking,
+        updateBookingStatus,
         getBookingByReference,
         activeBookingModalRoomId,
         openBookingModal,
@@ -830,6 +927,8 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         loginUser,
         logoutUser,
         isAuthModalOpen,
+        authModalMode,
+        setAuthModalMode,
         openAuthModal,
         closeAuthModal,
         savedAttractionIds,
@@ -841,16 +940,22 @@ export const ResortProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         likeSocialPost,
         chatMessages,
         sendChatMessage,
+        sendMessage: sendChatMessage,
         isChatOpen,
         setIsChatOpen,
+        toggleChat,
+        isSupportTyping,
         notifications,
         addNotification,
         markNotificationsAsRead,
         unreadNotificationsCount,
         isOfflineMode,
         setIsOfflineMode,
+        toggleOfflineMode,
         isOfflineModalOpen,
         setIsOfflineModalOpen,
+        openOfflineModal,
+        closeOfflineModal,
         searchQuery,
         setSearchQuery,
         currentSection,

@@ -38,10 +38,10 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
 
   // Computed metrics
-  const totalRevenuePHP = reservations.reduce((sum, r) => sum + (r.paymentStatus !== 'Refunded' ? r.totalAmountPHP : 0), 0);
+  const totalRevenuePHP = reservations.reduce((sum, r) => sum + (r.bookingStatus !== 'Cancelled' ? r.totalAmountPHP : 0), 0);
   const totalNightsBooked = reservations.reduce((sum, r) => sum + r.nights, 0);
   const confirmedCount = reservations.filter(r => r.bookingStatus === 'Confirmed').length;
-  const checkedInCount = reservations.filter(r => r.bookingStatus === 'Checked In').length;
+  const checkedInCount = reservations.filter(r => r.bookingStatus === 'Checked-In').length;
 
   const filteredReservations = reservations.filter((r) => {
     const matchesSearch = 
@@ -295,21 +295,25 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                         onChange={(e) => updateBookingStatus(res.id, e.target.value as any)}
                         className={`text-xs font-bold px-2.5 py-1 rounded-lg border cursor-pointer ${
                           res.bookingStatus === 'Confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          res.bookingStatus === 'Checked In' ? 'bg-green-50 text-green-700 border-green-200' :
-                          res.bookingStatus === 'Checked Out' ? 'bg-gray-100 text-gray-700 border-gray-300' :
+                          res.bookingStatus === 'Checked-In' ? 'bg-green-50 text-green-700 border-green-200' :
+                          res.bookingStatus === 'Completed' ? 'bg-gray-100 text-gray-700 border-gray-300' :
                           'bg-red-50 text-red-700 border-red-200'
                         }`}
                       >
                         <option value="Confirmed">Confirmed</option>
-                        <option value="Checked In">Checked In</option>
-                        <option value="Checked Out">Checked Out</option>
+                        <option value="Checked-In">Checked-In</option>
+                        <option value="Completed">Completed</option>
                         <option value="Cancelled">Cancelled</option>
                       </select>
                     </td>
                     <td className="p-3.5 text-right">
                       <button
                         onClick={() => {
-                          alert(`Reservation ${res.referenceNumber}\nSpecial Requests: ${res.specialRequests || 'None'}\nDietary: ${res.dietaryRequirements || 'None'}\nArrival: ${res.estimatedArrivalTime}`);
+                          addNotification(
+                            `Guest Notes: #${res.referenceNumber}`,
+                            `Special Requests: ${res.specialRequests || 'None'} | Dietary: ${res.dietaryRequirements || 'None'} | Arrival: ${res.estimatedArrivalTime || 'Not specified'}`,
+                            'booking'
+                          );
                         }}
                         className="px-2.5 py-1 bg-[#FAF7F2] hover:bg-[#EFE8DC] text-[#2C241D] font-bold rounded-lg border border-[#DDD0B9] transition text-[11px]"
                       >

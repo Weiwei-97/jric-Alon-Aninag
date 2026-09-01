@@ -24,8 +24,9 @@ import { CURRENCY_RATES } from '../data/resortData';
 import { CurrencyCode, LanguageCode } from '../types';
 
 export const Header: React.FC<{
-  onOpenMyBookings: () => void;
-}> = ({ onOpenMyBookings }) => {
+  onOpenMyBookings?: () => void;
+  onOpenAdmin?: () => void;
+}> = ({ onOpenMyBookings, onOpenAdmin }) => {
   const {
     currency,
     setCurrency,
@@ -480,7 +481,11 @@ export const Header: React.FC<{
           <div className="pt-3 border-t border-stone-200 flex flex-wrap gap-2">
             <button
               onClick={() => {
-                onOpenMyBookings();
+                if (onOpenMyBookings) {
+                  onOpenMyBookings();
+                } else {
+                  openBookingModal();
+                }
                 setIsMobileMenuOpen(false);
               }}
               className="flex-1 py-2 px-3 bg-stone-50 rounded-md border border-stone-200 text-xs font-semibold text-stone-800 flex items-center justify-center gap-1.5 uppercase tracking-wider"

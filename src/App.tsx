@@ -49,7 +49,7 @@ const ResortAppContent: React.FC = () => {
         <>
           <Header onOpenAdmin={() => setIsAdminOpen(true)} />
           <main>
-            <Hero />
+            <Hero onOpenVirtualTour={() => setIsVirtualTourOpen(true)} />
             <RoomsSection />
             <InteractiveMap />
             <DiningSection />

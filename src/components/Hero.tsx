@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export const Hero: React.FC<{
-  onOpenVirtualTour: () => void;
+  onOpenVirtualTour?: () => void;
 }> = ({ onOpenVirtualTour }) => {
   const { openBookingModal, formatPrice, t } = useResort();
 
@@ -112,7 +112,14 @@ export const Hero: React.FC<{
             </button>
 
             <button
-              onClick={onOpenVirtualTour}
+              onClick={() => {
+                if (onOpenVirtualTour) {
+                  onOpenVirtualTour();
+                } else {
+                  const section = document.getElementById('gallery') || document.getElementById('virtual-tour') || document.getElementById('experiences');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
               className="px-6 py-3.5 rounded-sm bg-white/15 hover:bg-white/25 text-white backdrop-blur-md border border-white/30 font-semibold text-xs sm:text-sm uppercase tracking-wider transition cursor-pointer flex items-center gap-2"
             >
               <Play className="w-4 h-4 text-[#83C5BE] fill-[#83C5BE]" />

@@ -160,6 +160,7 @@ export interface UserAccount {
   savedDestinations: string[];
   bookingHistory: string[];
   avatar?: string;
+  memberSince?: string;
 }
 
 export interface ChatMessage {
